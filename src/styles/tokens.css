@@ -1,0 +1,81 @@
+/* ==========================================================================
+   Design tokens
+   A warm, editorial palette: parchment paper, deep pine green and terracotta.
+   Every colour is defined once here and re-mapped for the dark theme.
+   ========================================================================== */
+
+:root {
+  --font-display: 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, sans-serif;
+
+  --bg: #f5efe2;
+  --bg-deep: #eee5d2;
+  --surface: #fffdf8;
+  --surface-2: #faf5e9;
+  --field: #f7f1e3;
+  --ink: #17211d;
+  --ink-soft: #38443e;
+  --muted: #69746d;
+  --line: #e5dcc7;
+  --line-strong: #d6c9ae;
+
+  --brand: #0e5c4a;
+  --brand-deep: #0a4033;
+  --brand-soft: #dcede5;
+  --brand-ink: #f8f2e3;
+  --accent: #c96e4b;
+  --accent-soft: #f6e2d6;
+  --sun: #e9b949;
+  --danger: #b4372e;
+  --danger-soft: #f7e1de;
+  --ok: #3f7d4f;
+
+  --shadow-sm: 0 2px 8px rgba(35, 45, 38, 0.06);
+  --shadow-md: 0 12px 30px rgba(35, 45, 38, 0.1);
+  --shadow-lg: 0 26px 70px rgba(23, 33, 29, 0.18);
+
+  --radius-sm: 12px;
+  --radius-md: 18px;
+  --radius-lg: 26px;
+  --radius-xl: 32px;
+
+  --app-max: 480px;
+  --tabbar-h: 68px;
+  --gutter: 18px;
+
+  --z-nav: 40;
+  --z-sticky: 30;
+  --z-sheet: 80;
+  --z-toast: 90;
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+html[data-theme='dark'] {
+  --bg: #0f1714;
+  --bg-deep: #0a100e;
+  --surface: #16211d;
+  --surface-2: #1b2723;
+  --field: #1d2a25;
+  --ink: #f1ead9;
+  --ink-soft: #d6d0bf;
+  --muted: #98a69e;
+  --line: #273530;
+  --line-strong: #35463f;
+
+  --brand: #6fd7b8;
+  --brand-deep: #0e5c4a;
+  --brand-soft: #17352c;
+  --brand-ink: #0b1a16;
+  --accent: #e08a63;
+  --accent-soft: #3a271f;
+  --sun: #f0c463;
+  --danger: #ef8a80;
+  --danger-soft: #3a211f;
+  --ok: #8fd39d;
+
+  --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 14px 34px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 30px 80px rgba(0, 0, 0, 0.55);
+}
