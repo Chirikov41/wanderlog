@@ -336,6 +336,7 @@ public class AssetServer {
             }
 
             byte[] body = files.get(ASSET_ROOT + path);
+            if (body == null) body = files.get(ASSET_ROOT + "/assets" + path);
             if (body == null) {
                 // Only navigation requests fall back to the SPA shell; a missing
                 // script or image must stay a 404 instead of turning into HTML.

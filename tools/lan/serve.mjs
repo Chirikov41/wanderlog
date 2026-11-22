@@ -108,7 +108,7 @@ const helpPage = `<!doctype html>
 <div class="card">
   <h2>方式一 · 下载 APK 安装<span class="tag">推荐</span></h2>
   <p class="muted">一个文件，装完就是独立 App，不依赖浏览器、不需要证书、离线可用。</p>
-  <a class="btn" href="/Wanderlog.apk">下载 Wanderlog.apk（约 1.3 MB）</a>
+  <a class="btn" href="/Wanderlog-2.2.apk">下载 Wanderlog 2.2（约 2.8 MB）</a>
   <ol>
     <li>下载完成后点开文件；若提示「禁止安装」，在系统设置里允许该来源安装未知应用。</li>
     <li>安装时允许「相机」「位置信息」权限。</li>
@@ -147,7 +147,7 @@ const httpServer = http.createServer((req, res) => {
     fs.createReadStream(path.join(CERT, 'ca.crt')).pipe(res)
     return
   }
-  if (req.url === '/Wanderlog.apk') {
+  if (req.url === '/Wanderlog.apk' || /^\/Wanderlog-[\d.]+\.apk$/.test(req.url)) {
     if (!fs.existsSync(APK)) {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })
       res.end('APK not built yet. Run android/build.ps1 first.')
@@ -157,6 +157,7 @@ const httpServer = http.createServer((req, res) => {
       'Content-Type': 'application/vnd.android.package-archive',
       'Content-Disposition': 'attachment; filename="Wanderlog.apk"',
       'Content-Length': fs.statSync(APK).size,
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
     })
     fs.createReadStream(APK).pipe(res)
     return

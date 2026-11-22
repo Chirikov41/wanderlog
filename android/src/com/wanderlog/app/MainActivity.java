@@ -154,6 +154,12 @@ public class MainActivity extends Activity {
                             new java.io.ByteArrayInputStream(new byte[0]));
                 }
                 byte[] body = server.get("www" + path);
+                if (body == null) {
+                    // The inlined bundle resolves its lazy chunks relative to the
+                    // document, so /TripMap-*.js arrives at the root instead of
+                    // /assets/; look there as well.
+                    body = server.get("www/assets" + path);
+                }
                 String servedPath = path;
                 if (body == null) {
                     boolean hasExtension = path.lastIndexOf('.') > path.lastIndexOf('/');

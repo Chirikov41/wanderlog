@@ -46,6 +46,10 @@ $html = [regex]::Replace($html, '<link rel="stylesheet"[^>]*href="\./([^"]+)"[^>
 $html = [regex]::Replace($html, '<script type="module"[^>]*src="\./([^"]+)"[^>]*></script>', {
     param($m)
     $js = [System.IO.File]::ReadAllText((Join-Path $assets $m.Groups[1].Value), [System.Text.Encoding]::UTF8)
+    # The bundle was written to live in /assets/, but inlining moves its base to
+    # the document root, so lazy chunks must be requested from their real folder.
+    $js = $js.Replace('./TripMap-', '/assets/TripMap-')
+    $js = $js.Replace('./workbox-window', '/assets/workbox-window')
     $js = $js.Replace('</script', '<\/script')
     return "<script type=`"module`">`n$js`n</script>"
 })
@@ -78,8 +82,8 @@ if ($LASTEXITCODE -ne 0) { throw "aapt2 compile failed" }
     --java (Join-Path $build "gen") `
     --min-sdk-version 23 `
     --target-sdk-version 34 `
-    --version-code 11 `
-    --version-name "2.0" `
+    --version-code 13 `
+    --version-name "2.2" `
     (Join-Path $build "resources.zip")
 if ($LASTEXITCODE -ne 0) { throw "aapt2 link failed" }
 } finally {
