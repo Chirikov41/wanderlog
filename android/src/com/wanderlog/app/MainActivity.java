@@ -150,10 +150,14 @@ public class MainActivity extends Activity {
                 byte[] body = server.get("www" + path);
                 String servedPath = path;
                 if (body == null) {
-                    body = server.get("www/index.html");
-                    servedPath = "/index.html";
+                    boolean hasExtension = path.lastIndexOf('.') > path.lastIndexOf('/');
+                    if (!hasExtension) {
+                        body = server.get("www/index.html");
+                        servedPath = "/index.html";
+                    }
                 }
                 if (body == null) {
+                    String message = "Not found: " + path + "\nassets=" + server.size();
                     return new WebResourceResponse(
                             "text/plain",
                             "utf-8",
@@ -161,7 +165,7 @@ public class MainActivity extends Activity {
                             "Not Found",
                             new java.util.HashMap<String, String>(),
                             new java.io.ByteArrayInputStream(
-                                    ("Not found: " + path).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+                                    message.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
                 }
                 return new WebResourceResponse(
                         server.mimeTypeOf(servedPath),

@@ -34,6 +34,26 @@ New-Item -ItemType Directory -Force -Path $build, $classes, $dex, $assets | Out-
 Write-Host "Copying web build..."
 Copy-Item -Recurse -Force (Join-Path $repo "dist\*") $assets
 
+Write-Host "Inlining the CSS and JS bundles into index.html..."
+$indexPath = Join-Path $assets "index.html"
+$html = [System.IO.File]::ReadAllText($indexPath, [System.Text.Encoding]::UTF8)
+$html = [regex]::Replace($html, '<link rel="modulepreload"[^>]*>', '')
+$html = [regex]::Replace($html, '<link rel="stylesheet"[^>]*href="\./([^"]+)"[^>]*>', {
+    param($m)
+    $css = [System.IO.File]::ReadAllText((Join-Path $assets $m.Groups[1].Value), [System.Text.Encoding]::UTF8)
+    return "<style>`n$css`n</style>"
+})
+$html = [regex]::Replace($html, '<script type="module"[^>]*src="\./([^"]+)"[^>]*></script>', {
+    param($m)
+    $js = [System.IO.File]::ReadAllText((Join-Path $assets $m.Groups[1].Value), [System.Text.Encoding]::UTF8)
+    $js = $js.Replace('</script', '<\/script')
+    return "<script type=`"module`">`n$js`n</script>"
+})
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($indexPath, $html, $utf8NoBom)
+$indexSize = (Get-Item $indexPath).Length
+Write-Host "index.html is now $indexSize bytes"
+
 Write-Host "Bundling the web build as res/raw/www.zip..."
 $rawDir = Join-Path $here "res\raw"
 New-Item -ItemType Directory -Force -Path $rawDir | Out-Null
@@ -58,8 +78,8 @@ if ($LASTEXITCODE -ne 0) { throw "aapt2 compile failed" }
     --java (Join-Path $build "gen") `
     --min-sdk-version 23 `
     --target-sdk-version 34 `
-    --version-code 9 `
-    --version-name "1.8" `
+    --version-code 10 `
+    --version-name "1.9" `
     (Join-Path $build "resources.zip")
 if ($LASTEXITCODE -ne 0) { throw "aapt2 link failed" }
 } finally {

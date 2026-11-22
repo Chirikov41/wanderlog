@@ -59,7 +59,7 @@ public class AssetServer {
 
     private final Context context;
     private final AssetManager assets;
-    private final Map<String, byte[]> files = new HashMap<>();
+    private final Map<String, byte[]> files = new java.util.concurrent.ConcurrentHashMap<>();
     private final ExecutorService pool = Executors.newFixedThreadPool(4);
     private ServerSocket serverSocket;
     private int port = -1;
@@ -242,7 +242,23 @@ public class AssetServer {
     }
 
     public byte[] get(String assetPath) {
-        return files.get(assetPath);
+        String key = assetPath.replace('\\', '/');
+        byte[] body = files.get(key);
+        if (body == null && key.startsWith("/")) body = files.get(key.substring(1));
+        if (body == null) {
+            String tail = key.startsWith("/") ? key.substring(1) : key;
+            for (Map.Entry<String, byte[]> entry : files.entrySet()) {
+                String candidate = entry.getKey();
+                if (candidate.equals(tail) || candidate.endsWith("/" + tail)) {
+                    return entry.getValue();
+                }
+            }
+        }
+        return body;
+    }
+
+    public int size() {
+        return files.size();
     }
 
     public String mimeTypeOf(String assetPath) {
