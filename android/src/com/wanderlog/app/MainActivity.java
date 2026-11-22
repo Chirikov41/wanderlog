@@ -139,6 +139,11 @@ public class MainActivity extends Activity {
                     // WebView origin, so fetch it natively and add the header.
                     return proxyGeocoder(url.toString());
                 }
+                if (host == null || !host.equals("appassets.androidplatform.net")) {
+                    // Map tiles, fonts and every other remote asset must go to the
+                    // network untouched; only the bundled app is served from memory.
+                    return null;
+                }
                 String path = url.getPath();
                 if (path == null || path.isEmpty()) path = "/";
                 if (path.equals("/")) path = "/index.html";
