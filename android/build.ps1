@@ -58,8 +58,8 @@ if ($LASTEXITCODE -ne 0) { throw "aapt2 compile failed" }
     --java (Join-Path $build "gen") `
     --min-sdk-version 23 `
     --target-sdk-version 34 `
-    --version-code 4 `
-    --version-name "1.3" `
+    --version-code 9 `
+    --version-name "1.8" `
     (Join-Path $build "resources.zip")
 if ($LASTEXITCODE -ne 0) { throw "aapt2 link failed" }
 } finally {

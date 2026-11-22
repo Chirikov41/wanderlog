@@ -241,6 +241,19 @@ public class AssetServer {
         return loadReport;
     }
 
+    public byte[] get(String assetPath) {
+        return files.get(assetPath);
+    }
+
+    public String mimeTypeOf(String assetPath) {
+        String type = mimeType(assetPath);
+        // WebResourceResponse expects a bare type such as "text/html"; a
+        // "text/html; charset=utf-8" value makes some WebView versions treat
+        // the page as plain text and show its source instead of rendering it.
+        int semicolon = type.indexOf(';');
+        return semicolon >= 0 ? type.substring(0, semicolon) : type;
+    }
+
     private void handle(Socket client) {
         try {
             Socket socket = client;
@@ -268,8 +281,17 @@ public class AssetServer {
                 int secondSpace = request.indexOf(' ', firstSpace + 1);
                 if (secondSpace > firstSpace) path = request.substring(firstSpace + 1, secondSpace);
             }
+            // Some WebView/proxy configurations send an absolute request URI.
+            if (path.startsWith("http://") || path.startsWith("https://")) {
+                try {
+                    path = new java.net.URI(path).getPath();
+                } catch (Exception ignored) {
+                    // keep the original value
+                }
+            }
             int query = path.indexOf('?');
             if (query >= 0) path = path.substring(0, query);
+            if (path == null || path.isEmpty()) path = "/";
 
             if (path.equals("/")) path = "/index.html";
             if (path.contains("..")) {
@@ -280,8 +302,14 @@ public class AssetServer {
 
             byte[] body = files.get(ASSET_ROOT + path);
             if (body == null) {
-                body = files.get(ASSET_ROOT + "/index.html");
-                path = "/index.html";
+                // Only navigation requests fall back to the SPA shell; a missing
+                // script or image must stay a 404 instead of turning into HTML.
+                boolean wantsHtml = request.toLowerCase().contains("accept: text/html");
+                boolean hasExtension = path.lastIndexOf('.') > path.lastIndexOf('/');
+                if (!hasExtension || wantsHtml) {
+                    body = files.get(ASSET_ROOT + "/index.html");
+                    path = "/index.html";
+                }
             }
             if (body == null) {
                 String message = "Not found: " + path + "\n" + loadReport

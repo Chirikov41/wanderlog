@@ -15,6 +15,9 @@ import android.webkit.GeolocationPermissions;
 import android.webkit.PermissionRequest;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -41,6 +44,10 @@ public class MainActivity extends Activity {
     private WebView webView;
     private AssetServer server;
     private ValueCallback<Uri[]> pendingFileCallback;
+    private android.widget.TextView errorView;
+    private int loadRetries = 0;
+    private int localPort = -1;
+    private boolean triedLocalServer = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -52,15 +59,6 @@ public class MainActivity extends Activity {
         requestAppPermissions();
 
         server = new AssetServer(this);
-        int port;
-        try {
-            port = server.start();
-        } catch (RuntimeException error) {
-            Toast.makeText(this, "Could not start the local server", Toast.LENGTH_LONG).show();
-            finish();
-            return;
-        }
-
         if (!server.hasIndex()) {
             // Surface the problem instead of showing a blank page.
             android.widget.TextView message = new android.widget.TextView(this);
@@ -71,8 +69,28 @@ public class MainActivity extends Activity {
             return;
         }
 
+        try {
+            localPort = server.start();
+        } catch (RuntimeException ignored) {
+            localPort = -1;
+        }
+
         webView = new WebView(this);
         configureWebView();
+
+        errorView = new android.widget.TextView(this);
+        errorView.setTextSize(11f);
+        errorView.setTextColor(Color.WHITE);
+        errorView.setBackgroundColor(Color.parseColor("#CC7A2E24"));
+        errorView.setPadding(24, 24, 24, 24);
+        errorView.setVisibility(android.view.View.GONE);
+        errorView.setMaxLines(8);
+        errorView.setOnClickListener(new android.view.View.OnClickListener() {
+            @Override
+            public void onClick(android.view.View view) {
+                view.setVisibility(android.view.View.GONE);
+            }
+        });
 
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.parseColor("#F5EFE2"));
@@ -81,9 +99,14 @@ public class MainActivity extends Activity {
                 new FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT));
+        FrameLayout.LayoutParams errorParams = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        errorParams.gravity = android.view.Gravity.BOTTOM;
+        root.addView(errorView, errorParams);
 
         setContentView(root);
-        webView.loadUrl("http://127.0.0.1:" + port + "/");
+        webView.loadUrl("https://appassets.androidplatform.net/");
     }
 
     private void configureWebView() {
@@ -106,12 +129,55 @@ public class MainActivity extends Activity {
         }
 
         webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public WebResourceResponse shouldInterceptRequest(
+                    WebView view, WebResourceRequest request) {
+                Uri url = request.getUrl();
+                String path = url.getPath();
+                if (path == null || path.isEmpty()) path = "/";
+                if (path.equals("/")) path = "/index.html";
+                // The APK does not need a service worker; serving 404 keeps the
+                // page outside a worker's control, where interception applies.
+                if (path.equals("/sw.js")) {
+                    return new WebResourceResponse(
+                            "text/plain",
+                            "utf-8",
+                            404,
+                            "Not Found",
+                            new java.util.HashMap<String, String>(),
+                            new java.io.ByteArrayInputStream(new byte[0]));
+                }
+                byte[] body = server.get("www" + path);
+                String servedPath = path;
+                if (body == null) {
+                    body = server.get("www/index.html");
+                    servedPath = "/index.html";
+                }
+                if (body == null) {
+                    return new WebResourceResponse(
+                            "text/plain",
+                            "utf-8",
+                            404,
+                            "Not Found",
+                            new java.util.HashMap<String, String>(),
+                            new java.io.ByteArrayInputStream(
+                                    ("Not found: " + path).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+                }
+                return new WebResourceResponse(
+                        server.mimeTypeOf(servedPath),
+                        "utf-8",
+                        new java.io.ByteArrayInputStream(body));
+            }
+
             @SuppressWarnings("deprecation")
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
                 Uri uri = Uri.parse(url);
                 String host = uri.getHost();
-                if (host == null || host.equals("127.0.0.1") || host.equals("localhost")) {
+                if (host == null
+                        || host.equals("127.0.0.1")
+                        || host.equals("localhost")
+                        || host.equals("appassets.androidplatform.net")) {
                     return false;
                 }
                 try {
@@ -120,6 +186,59 @@ public class MainActivity extends Activity {
                     // No app can open this link.
                 }
                 return true;
+            }
+
+            @Override
+            public void onPageFinished(final WebView view, final String url) {
+                view.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        view.evaluateJavascript(
+                                "(function(){var r=document.getElementById('root');"
+                                        + "return r ? String(r.childElementCount) : '-1';})()",
+                                new ValueCallback<String>() {
+                                    @Override
+                                    public void onReceiveValue(String value) {
+                                        if ("0".equals(value)) {
+                                            if (!triedLocalServer && localPort > 0) {
+                                                triedLocalServer = true;
+                                                showError("Intercepted page did not mount; retrying via the local server");
+                                                view.loadUrl("http://127.0.0.1:" + localPort + "/");
+                                            } else {
+                                                showError("Page loaded but the app did not mount (#root empty)\n" + url);
+                                            }
+                                        }
+                                    }
+                                });
+                    }
+                }, 2500);
+            }
+
+            @Override
+            public void onReceivedHttpError(
+                    WebView view, WebResourceRequest request, WebResourceResponse response) {
+                String url = request.getUrl().toString();
+                if (url.contains("/assets/") || url.endsWith(".js")) {
+                    showError("HTTP " + response.getStatusCode() + "\n" + url);
+                }
+            }
+
+            @Override
+            public void onReceivedError(
+                    final WebView view, WebResourceRequest request, WebResourceError error) {
+                if (request.isForMainFrame()) {
+                    showError("Network error " + error.getErrorCode() + "\n" + request.getUrl());
+                    if (loadRetries < 3) {
+                        loadRetries++;
+                        final String failedUrl = request.getUrl().toString();
+                        view.postDelayed(new Runnable() {
+                            @Override
+                            public void run() {
+                                view.loadUrl(failedUrl);
+                            }
+                        }, 800);
+                    }
+                }
             }
         });
 
@@ -164,7 +283,21 @@ public class MainActivity extends Activity {
             @Override
             public boolean onConsoleMessage(ConsoleMessage message) {
                 Log.d(TAG, "console: " + message.message() + " (line " + message.lineNumber() + ")");
+                if (message.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
+                    showError(message.message() + "\n" + message.sourceId() + ":" + message.lineNumber());
+                }
                 return true;
+            }
+        });
+    }
+
+    private void showError(String text) {
+        if (errorView == null) return;
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                errorView.setText(text);
+                errorView.setVisibility(android.view.View.VISIBLE);
             }
         });
     }
