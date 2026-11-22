@@ -133,6 +133,12 @@ public class MainActivity extends Activity {
             public WebResourceResponse shouldInterceptRequest(
                     WebView view, WebResourceRequest request) {
                 Uri url = request.getUrl();
+                String host = url.getHost();
+                if (host != null && host.equals("nominatim.openstreetmap.org")) {
+                    // The reverse geocoder does not answer CORS preflight from a
+                    // WebView origin, so fetch it natively and add the header.
+                    return proxyGeocoder(url.toString());
+                }
                 String path = url.getPath();
                 if (path == null || path.isEmpty()) path = "/";
                 if (path.equals("/")) path = "/index.html";
@@ -223,6 +229,7 @@ public class MainActivity extends Activity {
                     WebView view, WebResourceRequest request, WebResourceResponse response) {
                 String url = request.getUrl().toString();
                 if (url.contains("/assets/") || url.endsWith(".js")) {
+                    if (url.endsWith("/sw.js") || url.contains("/workbox-")) return;
                     showError("HTTP " + response.getStatusCode() + "\n" + url);
                 }
             }
@@ -288,7 +295,13 @@ public class MainActivity extends Activity {
             public boolean onConsoleMessage(ConsoleMessage message) {
                 Log.d(TAG, "console: " + message.message() + " (line " + message.lineNumber() + ")");
                 if (message.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
-                    showError(message.message() + "\n" + message.sourceId() + ":" + message.lineNumber());
+                    String text = message.message();
+                    String lower = (text + " " + message.sourceId()).toLowerCase();
+                    if (lower.contains("serviceworker") || lower.contains("service worker")
+                            || lower.contains("sw.js") || lower.contains("workbox")) {
+                        return true;
+                    }
+                    showError(text + "\n" + message.sourceId() + ":" + message.lineNumber());
                 }
                 return true;
             }
@@ -304,6 +317,57 @@ public class MainActivity extends Activity {
                 errorView.setVisibility(android.view.View.VISIBLE);
             }
         });
+    }
+
+    /**
+     * Reverse geocoding is a cross-origin fetch. The public Nominatim endpoint
+     * does not always answer with Access-Control-Allow-Origin, which blocks the
+     * request when the page origin is the WebView asset host. Fetching it here
+     * and adding the header keeps the feature working.
+     */
+    private WebResourceResponse proxyGeocoder(String target) {
+        java.util.Map<String, String> headers = new java.util.HashMap<>();
+        headers.put("Access-Control-Allow-Origin", "*");
+        headers.put("Cache-Control", "no-store");
+        try {
+            java.net.HttpURLConnection connection =
+                    (java.net.HttpURLConnection) new java.net.URL(target).openConnection();
+            connection.setConnectTimeout(8000);
+            connection.setReadTimeout(8000);
+            connection.setRequestProperty(
+                    "User-Agent", "Wanderlog/2.0 (COMP10013 coursework, UWS)");
+            connection.setRequestProperty("Accept", "application/json");
+            int status = connection.getResponseCode();
+            java.io.InputStream stream =
+                    status >= 400 ? connection.getErrorStream() : connection.getInputStream();
+            byte[] body = stream == null ? new byte[0] : readAll(stream);
+            if (stream != null) stream.close();
+            return new WebResourceResponse(
+                    "application/json",
+                    "utf-8",
+                    status,
+                    "OK",
+                    headers,
+                    new java.io.ByteArrayInputStream(body));
+        } catch (Exception error) {
+            byte[] body = ("{\"error\":\"" + error.getClass().getSimpleName() + "\"}")
+                    .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            return new WebResourceResponse(
+                    "application/json",
+                    "utf-8",
+                    502,
+                    "Bad Gateway",
+                    headers,
+                    new java.io.ByteArrayInputStream(body));
+        }
+    }
+
+    private byte[] readAll(java.io.InputStream input) throws java.io.IOException {
+        java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int read;
+        while ((read = input.read(buffer)) != -1) output.write(buffer, 0, read);
+        return output.toByteArray();
     }
 
     private void requestAppPermissions() {

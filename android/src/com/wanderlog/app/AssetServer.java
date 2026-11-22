@@ -120,21 +120,40 @@ public class AssetServer {
     private int loadFromRawResource() {
         int count = 0;
         try {
+            // Copy the raw resource to a real file first: ZipFile reads the
+            // central directory, which is far more reliable on device than
+            // streaming the nested zip through ZipInputStream.
+            java.io.File cached = new java.io.File(context.getCacheDir(), "wanderlog-www.zip");
             InputStream raw = context.getResources().openRawResource(R.raw.www);
             try {
-                java.util.zip.ZipInputStream zip = new java.util.zip.ZipInputStream(raw);
+                java.io.FileOutputStream output = new java.io.FileOutputStream(cached);
                 try {
-                    ZipEntry entry;
-                    while ((entry = zip.getNextEntry()) != null) {
-                        if (entry.isDirectory()) continue;
-                        files.put("www/" + entry.getName(), readAll(zip));
-                        count++;
-                    }
+                    byte[] buffer = new byte[8192];
+                    int read;
+                    while ((read = raw.read(buffer)) != -1) output.write(buffer, 0, read);
                 } finally {
-                    zip.close();
+                    output.close();
                 }
             } finally {
                 raw.close();
+            }
+
+            ZipFile zip = new ZipFile(cached);
+            try {
+                Enumeration<? extends ZipEntry> entries = zip.entries();
+                while (entries.hasMoreElements()) {
+                    ZipEntry entry = entries.nextElement();
+                    if (entry.isDirectory()) continue;
+                    InputStream input = zip.getInputStream(entry);
+                    try {
+                        files.put("www/" + entry.getName(), readAll(input));
+                        count++;
+                    } finally {
+                        input.close();
+                    }
+                }
+            } finally {
+                zip.close();
             }
         } catch (Exception error) {
             Log.w(TAG, "reading the raw resource failed", error);
