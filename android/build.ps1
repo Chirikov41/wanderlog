@@ -48,8 +48,8 @@ if ($LASTEXITCODE -ne 0) { throw "aapt2 compile failed" }
     -A "assets" `
     --min-sdk-version 23 `
     --target-sdk-version 34 `
-    --version-code 1 `
-    --version-name "1.0" `
+    --version-code 2 `
+    --version-name "1.1" `
     (Join-Path $build "resources.zip")
 if ($LASTEXITCODE -ne 0) { throw "aapt2 link failed" }
 } finally {
@@ -76,26 +76,6 @@ $zip = [System.IO.Compression.ZipFile]::Open($pack, "Update")
     $zip, (Join-Path $dex "classes.dex"), "classes.dex",
     [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
 $zip.Dispose()
-
-# aapt2 on Windows can store asset entries with backslashes; Android expects
-# forward slashes inside the APK, so normalise every entry name before signing.
-Write-Host "Normalising archive paths..."
-$normalized = Join-Path $build "normalized.apk"
-$source = [System.IO.Compression.ZipFile]::OpenRead($pack)
-$target = [System.IO.Compression.ZipFile]::Open($normalized, "Create")
-try {
-    foreach ($entry in $source.Entries) {
-        $name = $entry.FullName.Replace("\", "/")
-        $copy = $target.CreateEntry($name, [System.IO.Compression.CompressionLevel]::Optimal)
-        $input = $entry.Open()
-        $output = $copy.Open()
-        try { $input.CopyTo($output) } finally { $output.Dispose(); $input.Dispose() }
-    }
-} finally {
-    $source.Dispose()
-    $target.Dispose()
-}
-Move-Item -Force $normalized $pack
 
 Write-Host "Signing..."
 $keystore = Join-Path $build "wanderlog.jks"
