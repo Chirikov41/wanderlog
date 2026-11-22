@@ -34,6 +34,15 @@ New-Item -ItemType Directory -Force -Path $build, $classes, $dex, $assets | Out-
 Write-Host "Copying web build..."
 Copy-Item -Recurse -Force (Join-Path $repo "dist\*") $assets
 
+Write-Host "Bundling the web build as res/raw/www.zip..."
+$rawDir = Join-Path $here "res\raw"
+New-Item -ItemType Directory -Force -Path $rawDir | Out-Null
+$rawZip = Join-Path $rawDir "www.zip"
+if (Test-Path $rawZip) { Remove-Item -Force $rawZip }
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+[System.IO.Compression.ZipFile]::CreateFromDirectory(
+    $assets, $rawZip, [System.IO.Compression.CompressionLevel]::Optimal, $false)
+
 Push-Location $here
 try {
 Write-Host "Compiling resources..."
@@ -46,10 +55,11 @@ if ($LASTEXITCODE -ne 0) { throw "aapt2 compile failed" }
     -I $AndroidJar `
     --manifest "AndroidManifest.xml" `
     -A "assets" `
+    --java (Join-Path $build "gen") `
     --min-sdk-version 23 `
     --target-sdk-version 34 `
-    --version-code 2 `
-    --version-name "1.1" `
+    --version-code 4 `
+    --version-name "1.3" `
     (Join-Path $build "resources.zip")
 if ($LASTEXITCODE -ne 0) { throw "aapt2 link failed" }
 } finally {
@@ -57,7 +67,9 @@ if ($LASTEXITCODE -ne 0) { throw "aapt2 link failed" }
 }
 
 Write-Host "Compiling Java..."
-$sources = Get-ChildItem -Recurse -Filter *.java (Join-Path $here "src") | ForEach-Object { $_.FullName }
+$sources = @()
+$sources += Get-ChildItem -Recurse -Filter *.java (Join-Path $here "src") | ForEach-Object { $_.FullName }
+$sources += Get-ChildItem -Recurse -Filter *.java (Join-Path $build "gen") | ForEach-Object { $_.FullName }
 & javac -source 8 -target 8 -encoding UTF-8 -cp $androidJar -d $classes $sources
 if ($LASTEXITCODE -ne 0) { throw "javac failed" }
 

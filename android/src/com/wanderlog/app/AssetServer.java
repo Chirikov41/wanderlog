@@ -13,10 +13,13 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 /**
  * Serves the bundled web app from the APK over http://127.0.0.1.
@@ -25,11 +28,16 @@ import java.util.concurrent.Executors;
  * http://127.0.0.1 as a secure, first-party origin: IndexedDB, the service
  * worker, geolocation and getUserMedia all behave exactly as they do on the
  * deployed PWA, while the assets never leave the device.
+ *
+ * Assets are read once into memory. The primary reader opens the APK itself as
+ * a zip file, which is immune to AssetManager path quirks; AssetManager is only
+ * a fallback.
  */
 public class AssetServer {
 
     private static final String TAG = "WanderlogServer";
     private static final String ASSET_ROOT = "www";
+    private static final String APK_PREFIX = "assets/www/";
     private static final Map<String, String> MIME = new HashMap<>();
 
     static {
@@ -49,13 +57,131 @@ public class AssetServer {
         MIME.put("txt", "text/plain; charset=utf-8");
     }
 
+    private final Context context;
     private final AssetManager assets;
+    private final Map<String, byte[]> files = new HashMap<>();
     private final ExecutorService pool = Executors.newFixedThreadPool(4);
     private ServerSocket serverSocket;
     private int port = -1;
+    private String loadReport = "not loaded";
 
     public AssetServer(Context context) {
-        this.assets = context.getAssets();
+        this.context = context.getApplicationContext();
+        this.assets = this.context.getAssets();
+        load();
+    }
+
+    private void load() {
+        int fromRaw = loadFromRawResource();
+        int fromApk = 0;
+        try {
+            ZipFile zip = new ZipFile(context.getApplicationInfo().sourceDir);
+            try {
+                Enumeration<? extends ZipEntry> entries = zip.entries();
+                while (entries.hasMoreElements()) {
+                    ZipEntry entry = entries.nextElement();
+                    String name = entry.getName();
+                    if (entry.isDirectory() || !name.startsWith(APK_PREFIX)) continue;
+                    InputStream input = zip.getInputStream(entry);
+                    try {
+                        files.put(name.substring("assets/".length()), readAll(input));
+                        fromApk++;
+                    } finally {
+                        input.close();
+                    }
+                }
+            } finally {
+                zip.close();
+            }
+        } catch (Exception error) {
+            Log.w(TAG, "reading assets from the APK failed", error);
+        }
+
+        int fromAssets = 0;
+        if (files.isEmpty()) {
+            try {
+                copyTree(ASSET_ROOT, fromAssets);
+            } catch (Exception error) {
+                Log.w(TAG, "reading assets from AssetManager failed", error);
+            }
+        }
+
+        loadReport = "raw=" + fromRaw + " apk=" + fromApk + " assetManager=" + fromAssets
+                + " total=" + files.size();
+        Log.i(TAG, "assets: " + loadReport + " index=" + files.containsKey("www/index.html"));
+    }
+
+    /**
+     * Primary loader: the web build is also packaged as res/raw/www.zip, which
+     * is read through the resource table. Resources are always available to the
+     * app (the launcher icon and label come from the same table), so this works
+     * even on installers where the assets directory is not readable.
+     */
+    private int loadFromRawResource() {
+        int count = 0;
+        try {
+            InputStream raw = context.getResources().openRawResource(R.raw.www);
+            try {
+                java.util.zip.ZipInputStream zip = new java.util.zip.ZipInputStream(raw);
+                try {
+                    ZipEntry entry;
+                    while ((entry = zip.getNextEntry()) != null) {
+                        if (entry.isDirectory()) continue;
+                        files.put("www/" + entry.getName(), readAll(zip));
+                        count++;
+                    }
+                } finally {
+                    zip.close();
+                }
+            } finally {
+                raw.close();
+            }
+        } catch (Exception error) {
+            Log.w(TAG, "reading the raw resource failed", error);
+        }
+        return count;
+    }
+
+    private int copyTree(String path, int count) throws IOException {
+        String[] children = assets.list(path);
+        if (children == null || children.length == 0) {
+            byte[] body = readAsset(path);
+            if (body != null) {
+                files.put(path, body);
+                return count + 1;
+            }
+            return count;
+        }
+        for (String child : children) {
+            count = copyTree(path + "/" + child, count);
+        }
+        return count;
+    }
+
+    private byte[] readAsset(String path) {
+        InputStream input = null;
+        try {
+            input = assets.open(path);
+            return readAll(input);
+        } catch (IOException missing) {
+            return null;
+        } finally {
+            if (input != null) {
+                try {
+                    input.close();
+                } catch (IOException ignored) {
+                    // ignore
+                }
+            }
+        }
+    }
+
+    private byte[] readAll(InputStream input) throws IOException {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int read;
+        while ((read = input.read(buffer)) != -1) output.write(buffer, 0, read);
+        return output.toByteArray();
     }
 
     public int start() {
@@ -94,7 +220,7 @@ public class AssetServer {
         }, "wanderlog-assets");
         thread.setDaemon(true);
         thread.start();
-        Log.i(TAG, "serving http://127.0.0.1:" + port + "/");
+        Log.i(TAG, "serving http://127.0.0.1:" + port + "/ (" + loadReport + ")");
         return port;
     }
 
@@ -105,6 +231,14 @@ public class AssetServer {
         } catch (IOException ignored) {
             // Nothing to do on shutdown.
         }
+    }
+
+    public boolean hasIndex() {
+        return files.containsKey("www/index.html");
+    }
+
+    public String diagnostic() {
+        return loadReport;
     }
 
     private void handle(Socket client) {
@@ -144,41 +278,21 @@ public class AssetServer {
                 return;
             }
 
-            byte[] body = readAsset(ASSET_ROOT + path);
+            byte[] body = files.get(ASSET_ROOT + path);
             if (body == null) {
-                body = readAsset(ASSET_ROOT + "/index.html");
+                body = files.get(ASSET_ROOT + "/index.html");
                 path = "/index.html";
             }
             if (body == null) {
-                write(socket, 404, "text/plain; charset=utf-8", "Not found".getBytes("UTF-8"));
+                String message = "Not found: " + path + "\n" + loadReport
+                        + "\nindex=" + files.containsKey("www/index.html");
+                write(socket, 404, "text/plain; charset=utf-8", message.getBytes("UTF-8"));
             } else {
                 write(socket, 200, mimeType(path), body);
             }
             socket.close();
         } catch (IOException error) {
             Log.w(TAG, "request failed", error);
-        }
-    }
-
-    private byte[] readAsset(String path) {
-        InputStream input = null;
-        try {
-            input = assets.open(path);
-            ByteArrayOutputStream output = new ByteArrayOutputStream();
-            byte[] buffer = new byte[8192];
-            int read;
-            while ((read = input.read(buffer)) != -1) output.write(buffer, 0, read);
-            return output.toByteArray();
-        } catch (IOException missing) {
-            return null;
-        } finally {
-            if (input != null) {
-                try {
-                    input.close();
-                } catch (IOException ignored) {
-                    // ignore
-                }
-            }
         }
     }
 

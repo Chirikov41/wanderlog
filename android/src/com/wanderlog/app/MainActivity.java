@@ -61,6 +61,16 @@ public class MainActivity extends Activity {
             return;
         }
 
+        if (!server.hasIndex()) {
+            // Surface the problem instead of showing a blank page.
+            android.widget.TextView message = new android.widget.TextView(this);
+            message.setPadding(48, 96, 48, 48);
+            message.setTextSize(14f);
+            message.setText("Wanderlog could not read its bundled files.\n\n" + server.diagnostic());
+            setContentView(message);
+            return;
+        }
+
         webView = new WebView(this);
         configureWebView();
 
