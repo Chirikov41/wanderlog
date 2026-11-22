@@ -108,7 +108,7 @@ const helpPage = `<!doctype html>
 <div class="card">
   <h2>方式一 · 下载 APK 安装<span class="tag">推荐</span></h2>
   <p class="muted">一个文件，装完就是独立 App，不依赖浏览器、不需要证书、离线可用。</p>
-  <a class="btn" href="/Wanderlog-2.2.apk">下载 Wanderlog 2.2（约 2.8 MB）</a>
+  <a class="btn" href="/Wanderlog-2.3.apk">下载 Wanderlog 2.3（约 3.3 MB）</a>
   <ol>
     <li>下载完成后点开文件；若提示「禁止安装」，在系统设置里允许该来源安装未知应用。</li>
     <li>安装时允许「相机」「位置信息」权限。</li>
