@@ -16,8 +16,10 @@ import { fileURLToPath } from 'node:url'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(HERE, '..', '..')
+const WORKSPACE = path.dirname(ROOT)
 const DIST = path.join(ROOT, 'dist')
 const CERT = path.join(HERE, 'cert')
+const APK = path.join(WORKSPACE, 'submission', 'Wanderlog.apk')
 const HTTPS_PORT = Number(process.env.PORT || 8443)
 const HTTP_PORT = Number(process.env.CA_PORT || 8080)
 
@@ -85,37 +87,46 @@ const helpPage = `<!doctype html>
 <style>
   body{margin:0;padding:28px 22px;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
        background:#f7f1e4;color:#17211d;line-height:1.6}
-  h1{font-family:Georgia,serif;font-size:28px;margin:0 0 6px;color:#0e5c4a}
+  h1{font-family:Georgia,serif;font-size:30px;margin:0 0 6px;color:#0e5c4a}
+  h2{font-family:Georgia,serif;font-size:19px;margin:0 0 6px;color:#0e5c4a}
   p{margin:8px 0}
   .card{background:#fffdf8;border:1px solid #e5dcc7;border-radius:18px;padding:18px;margin:16px 0}
   a.btn{display:block;text-align:center;background:#0e5c4a;color:#f8f2e3;text-decoration:none;
-        padding:14px;border-radius:999px;font-weight:700;margin-top:12px}
+        padding:15px;border-radius:999px;font-weight:700;margin-top:12px;font-size:16px}
   a.alt{display:block;text-align:center;border:1px solid #d6c9ae;color:#17211d;text-decoration:none;
         padding:12px;border-radius:999px;margin-top:10px}
   ol{padding-left:20px}
+  ol li{margin:4px 0}
   code{background:#f0e9d9;padding:2px 6px;border-radius:6px;font-size:13px}
   .muted{color:#6e7872;font-size:13px}
+  .tag{display:inline-block;background:#e9dcc3;color:#0a4033;border-radius:999px;
+       padding:3px 10px;font-size:12px;font-weight:700;margin-left:6px;vertical-align:middle}
 </style></head><body>
 <h1>Wanderlog</h1>
-<p class="muted">在手机上安装这个 PWA 的两步操作</p>
+<p class="muted">选择一种方式装到手机上</p>
 
 <div class="card">
-  <strong>第 1 步 · 安装证书</strong>
-  <p class="muted">局域网用的 HTTPS 证书，装一次即可（之后换 IP 也不用重装）。</p>
-  <a class="btn" href="/ca.crt">下载证书 ca.crt</a>
+  <h2>方式一 · 下载 APK 安装<span class="tag">推荐</span></h2>
+  <p class="muted">一个文件，装完就是独立 App，不依赖浏览器、不需要证书、离线可用。</p>
+  <a class="btn" href="/Wanderlog.apk">下载 Wanderlog.apk（约 1.3 MB）</a>
   <ol>
-    <li>下载后点开文件，按系统提示安装为「CA 证书 / 受信任的凭据」。</li>
-    <li>Android：设置 → 安全 → 加密与凭据 → 安装证书 → CA 证书。</li>
-    <li>iPhone：下载后到 设置 → 通用 → VPN与设备管理 安装描述文件，
-        再到 设置 → 通用 → 关于本机 → 证书信任设置 打开完全信任。</li>
+    <li>下载完成后点开文件；若提示「禁止安装」，在系统设置里允许该来源安装未知应用。</li>
+    <li>安装时允许「相机」「位置信息」权限。</li>
+    <li>桌面出现 Wanderlog 图标，打开即用。</li>
   </ol>
 </div>
 
 <div class="card">
-  <strong>第 2 步 · 打开并安装应用</strong>
-  <a class="btn" href="https://${ADDRESS}:${HTTPS_PORT}/">打开 Wanderlog</a>
+  <h2>方式二 · 用浏览器安装 PWA</h2>
+  <p class="muted">需要先让手机信任本机证书（装一次即可）。</p>
+  <a class="alt" href="/ca.crt">1. 下载证书 ca.crt</a>
+  <ol>
+    <li>Android：设置 → 安全 → 加密与凭据 → 安装证书 → CA 证书。</li>
+    <li>iPhone：用 Safari 下载后到 设置 → 通用 → VPN与设备管理 安装，
+        再到 设置 → 通用 → 关于本机 → 证书信任设置 打开完全信任。</li>
+  </ol>
+  <a class="btn" href="https://${ADDRESS}:${HTTPS_PORT}/">2. 打开 Wanderlog</a>
   <p class="muted">打开后：Android Chrome 菜单 →「安装应用」；iPhone Safari → 分享 →「添加到主屏幕」。</p>
-  <a class="alt" href="https://${ADDRESS}:${HTTPS_PORT}/">https://${ADDRESS}:${HTTPS_PORT}/</a>
 </div>
 </body></html>`
 
@@ -134,6 +145,20 @@ const httpServer = http.createServer((req, res) => {
       'Content-Disposition': 'attachment; filename="wanderlog-ca.crt"',
     })
     fs.createReadStream(path.join(CERT, 'ca.crt')).pipe(res)
+    return
+  }
+  if (req.url === '/Wanderlog.apk') {
+    if (!fs.existsSync(APK)) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })
+      res.end('APK not built yet. Run android/build.ps1 first.')
+      return
+    }
+    res.writeHead(200, {
+      'Content-Type': 'application/vnd.android.package-archive',
+      'Content-Disposition': 'attachment; filename="Wanderlog.apk"',
+      'Content-Length': fs.statSync(APK).size,
+    })
+    fs.createReadStream(APK).pipe(res)
     return
   }
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
