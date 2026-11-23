@@ -22,7 +22,7 @@ One-time setup in the repository:
 1. Push the project to `main`.
 2. **Settings → Pages → Build and deployment → Source: GitHub Actions**.
 3. Wait for the *Deploy to GitHub Pages* run to finish.
-4. The URL is `https://<your-github>.github.io/wanderlog/`.
+4. The URL is `https://chirikov41.github.io/wanderlog/`.
 
 Because `base` is `'./'` and the router is hash-based, no extra path configuration is required.
 If you rename the repository, the URL changes but the build still works.

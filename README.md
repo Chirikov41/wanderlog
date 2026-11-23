@@ -161,7 +161,7 @@ A longer write-up lives in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 ### Install and run
 
 ```bash
-git clone https://github.com/<your-github>/wanderlog.git
+git clone https://github.com/Chirikov41/wanderlog.git
 cd wanderlog
 pnpm install
 pnpm dev
