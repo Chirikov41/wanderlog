@@ -34,3 +34,7 @@ node_modules/.tmp/
 
 # Local CA and server certificate for phone testing
 tools/lan/cert/
+
+# surge deploy artefacts
+CNAME
+.surge
