@@ -235,9 +235,9 @@ Full instructions, including HTTPS-on-your-phone options, are in
 ## Android APK
 
 The same build is also packaged as an installable Android app in [`android/`](android/README.md).
-The APK bundles `dist/` inside the package and serves it to a WebView from `http://127.0.0.1`,
-which is a secure first-party origin: IndexedDB, geolocation and the camera work without any
-network, hosting or certificate.
+The APK bundles the web build inside the package and hands it to a WebView through request
+interception, so IndexedDB, geolocation and the camera work without any network, hosting or
+certificate.
 
 ```powershell
 cd android
@@ -245,8 +245,13 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 # -> submission/Wanderlog.apk
 ```
 
-Requires JDK 17 and Android SDK build-tools 34. The output is a signed ~1.3 MB APK
+Requires JDK 17 and Android SDK build-tools 34. The output is a signed ~3.3 MB APK
 (`minSdk 23`, `targetSdk 34`).
+
+Version numbers: the web app reports **1.0.0** (`src/lib/constants.ts`), while the Android
+container is versioned separately in `android/AndroidManifest.xml` (currently **2.4**,
+versionCode 15). Both strings are intentional: one is the semantic app version, the other tracks
+the packaging shell.
 
 ---
 
